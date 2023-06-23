@@ -222,7 +222,7 @@ class PincherTimeLapse:
                 self.listFrames.append(Frame(self.I[i], i, self.NB, Nup, status_frame, status_nUp, self.scale))
                 
 
-    def detectBeads(self, resFileImported):
+    def detectBeads(self):
         """
         If no '_Results.txt' file has been previously imported, ask each Frame
         object in the listFrames to run its Frame.detectBeads() method.
@@ -235,27 +235,21 @@ class PincherTimeLapse:
         """
         for frame in self.listFrames: #[:3]:
             plot = 0
-            if not resFileImported:
-                frame.detectBeads(plot)
-                self.detectBeadsResult = pd.concat([self.detectBeadsResult, frame.resDf])
+            # if not resFileImported:
+            #     frame.detectBeads(plot)
+            #     self.detectBeadsResult = pd.concat([self.detectBeadsResult, frame.resDf])
 
-            else:
-                resDf = self.detectBeadsResult.loc[self.detectBeadsResult['Slice'] == frame.iS+1]
-                frame.resDf = resDf
+            # else:
+            resDf = self.detectBeadsResult.loc[self.detectBeadsResult['Slice'] == frame.iS+1]
+            frame.resDf = resDf
 
             frame.makeListBeads()
 
-        if not resFileImported:
-            self.detectBeadsResult = self.detectBeadsResult.convert_dtypes()
-            self.detectBeadsResult.reset_index(inplace=True)
-            self.detectBeadsResult.drop(['index'], axis = 1, inplace=True)
-
-
-    def saveBeadsDetectResult(self, path):
-        """
-        Save the 'PTL.detectBeadsResult' DataFrame.
-        """
-        self.detectBeadsResult.to_csv(path, sep='\t', index = False)
+    # def saveBeadsDetectResult(self, path):
+    #     """
+    #     Save the 'PTL.detectBeadsResult' DataFrame.
+    #     """
+    #     self.detectBeadsResult.to_csv(path, sep='\t', index = False)
 
     def importBeadsDetectResult(self, path=''):
         """
@@ -265,8 +259,8 @@ class PincherTimeLapse:
         for c in df.columns:
             if 'Unnamed' in c:
                 df.drop([c], axis = 1, inplace=True)
+                
         self.detectBeadsResult = df
-
 
         
     
@@ -581,6 +575,43 @@ class PincherTimeLapse:
         bestStd = self.findBestStd()
         for i in range(self.NB):
             self.listTrajectories[i].dict['bestStd'] = bestStd
+            
+            
+    def plot_computed_trajectories(self):
+        lastF = self.listFrames[-1]
+        fig, ax = plt.subplots(1,1, figsize=(5, 5))
+        ax.imshow(lastF.F, cmap = 'gray', vmin = 0, vmax = 3000)
+        # if len(lastF.listBeads) > 0:
+        #     for B in lastF.listBeads:
+        #         ax.plot([B.x], [B.y], c='darkred', marker='P', markersize = 15)       
+        for iB in range(self.NB):
+            T = self.listTrajectories[iB]
+            colors = gs.colorList10
+            c = colors[iB]
+            ax.plot(T.dict['X'], T.dict['Y'], color=c, lw=0.75)
+            if iB == 0:
+                ax.plot(T.dict['X'][0], T.dict['Y'][0], lw=0, 
+                        color='darkturquoise', marker = 'o', markersize = 5, zorder=4, label='initial')
+                ax.plot(T.dict['X'][-1], T.dict['Y'][-1], lw=0,
+                        color='darkred', marker = 'o', markersize = 5, zorder=5, label='final')
+            else:
+                ax.plot(T.dict['X'][0], T.dict['Y'][0], lw=0, 
+                        color='darkturquoise', marker = 'o', markersize = 5, zorder=4)
+                ax.plot(T.dict['X'][-1], T.dict['Y'][-1], lw=0,
+                        color='darkred', marker = 'o', markersize = 5, zorder=5)
+        ax.set_xlim([125, 315])   
+        ax.set_ylim([460, 270])
+        
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        
+        ax.legend(loc='lower right', fontsize = 9)
+        
+        plt.show()
+        self.plot_summary = (fig, ax)
+            
 
 
     def importTrajectories(self, path, iB):
@@ -618,6 +649,7 @@ class PincherTimeLapse:
         Nup = self.Nuplet
         nT = self.listTrajectories[0].nT
         status_nUp = self.listTrajectories[0].dict['status_nUp']
+        status_frame = self.listTrajectories[0].dict['status_frame']
         sum_std = np.zeros(nT)
         for i in range(self.NB):
             sum_std += np.array(self.listTrajectories[i].dict['StdDev'])
@@ -625,10 +657,10 @@ class PincherTimeLapse:
         bestStd = np.zeros(nT, dtype = bool)
         i = 0
         while i < nT:
-            if status_nUp[i] == 0:
+            if status_frame[i] == 0:
                 bestStd[i] = True
                 i += 1
-            elif status_nUp[i] > 0:
+            elif status_frame[i] > 0:
                 s2 = status_nUp[i]
                 L = [i]
                 j = 0
@@ -789,17 +821,19 @@ class Frame:
         return(text)
 
     def show(self, strech = True):
+        print(len(self.listBeads))
         fig, ax = plt.subplots(1,1)
 #         fig_size = plt.gcf().get_size_inches()
 #         fig.set_size_inches(2 * fig_size)
         if strech:
             pStart, pStop = np.percentile(self.F, (1, 99))
-            ax.imshow(self.F, cmap = 'gray', vmin = pStart, vmax = pStop)
+            ax.imshow(self.F, cmap = 'gray', vmin = 0, vmax = 3000)
         else:
             ax.imshow(self.F, cmap = 'gray')
         if len(self.listBeads) > 0:
             for B in self.listBeads:
                 ax.plot([B.x], [B.y], c='orange', marker='+', markersize = 15)
+
         fig.show()
 
     def makeListBeads(self):
@@ -1153,12 +1187,10 @@ class Trajectory:
         self.dict['Neighbour_R'] = arrayNeighbours[:,1]
 
 
-
-
     def plot(self, ax, i_color):
         colors = gs.colorList10
         c = colors[i_color]
-        ax.plot(self.dict['X'], self.dict['Y'], color=c, lw=0.5)
+        ax.plot(self.dict['X'], self.dict['Y'], color=c, lw=1)
 
 # %%%% Main
 
@@ -1181,19 +1213,27 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     PathDeptho = dictPaths['PathDeptho']
     PathResultsDir = dictPaths['PathResultsDir']
     
-    bead_diameter = dictConstants['bead_diameter']
-    normal_field = dictConstants['normal_field']
-    magnetic_field_correction = dictConstants['magnetic_field_correction']
-    multi_image_Z_step = dictConstants['multi_image_Z_step']
-    multi_image_Z_direction = dictConstants['multi_image_Z_direction']
-    scale_pixel_per_um = dictConstants['scale_pixel_per_um']
-    optical_index_correction = dictConstants['optical_index_correction']
+    dictOptions = {'redoAllSteps' : False, 
+                     'trackAll' : False,
+                     'timeLog' : True
+                     }
     
-    timeLog = kwargs['timeLog']
-    redoAllSteps = kwargs['timeLog']
-    trackAll = kwargs['trackAll']
+    dictOptions.update(kwargs)
     
-        #### 0.1 - Make list of files to analyse
+    timeLog = dictOptions['timeLog']
+    redoAllSteps = dictOptions['redoAllSteps']
+    trackAll = dictOptions['trackAll']
+    
+    #### 0.1 Create some new folders if necessary
+    trajDirRaw = os.path.join(PathResultsDir, 'Trajectories_raw')
+    if not os.path.exists(trajDirRaw):
+        os.mkdir(trajDirRaw)
+        
+    trajDir = os.path.join(PathResultsDir, 'Trajectories')
+    if not os.path.exists(trajDir):
+        os.mkdir(trajDir)
+    
+    #### 0.2 - Make list of files to analyse
 
     imagesToAnalyse = []
     imagesToAnalyse_Paths = []
@@ -1201,17 +1241,16 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     fileList = os.listdir(PathRawDataDir)
     for f in fileList:
         fPath = os.path.join(PathRawDataDir, f)
-        if os.path.isfile(fPath[:-4] + '_Timepoints.txt'):
+        if os.path.isfile(fPath[:-4] + '_Results.txt'):
             if f.endswith('.tif') or f.endswith('.tiff') or f.endswith('.TIF'):
                 imagesToAnalyse.append(f)
                 imagesToAnalyse_Paths.append(fPath)    
     
     
-        #### 0.2 - Begining of the Main Loop
+    #### 0.3 - Begining of the Main Loop
     for i in range(len(imagesToAnalyse)): 
         f, fP = imagesToAnalyse[i], imagesToAnalyse_Paths[i]
-        manipID = ufun.findInfosInFileName(f, 'manipID') # See Utility Functions > findInfosInFileName
-        cellID = ufun.findInfosInFileName(f, 'cellID') # See Utility Functions > findInfosInFileName
+        cellID = '.'.join(f.split('.')[:-1])
 
         print('\n')
         print(gs.BLUE + 'Analysis of file {:.0f}/{:.0f} : {}'.format(i+1, len(imagesToAnalyse), f))
@@ -1241,15 +1280,14 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
         logFilePath = fP[:-4] + '_LogPY.txt'
         logFileImported = False
         if redoAllSteps:
-            logFileImported = False
-            
-        elif os.path.isfile(logFilePath):
-            PTL.importLog(logFilePath)
-            PTL.dictLog['UILog'] = PTL.dictLog['UILog'].astype(str)
-            logFileImported = True
+            pass
+        else:    
+            if os.path.isfile(logFilePath):
+                PTL.importLog(logFilePath)
+                PTL.dictLog['UILog'] = PTL.dictLog['UILog'].astype(str)
+                logFileImported = True
 
         print(gs.BLUE + 'OK!')
-
         print(gs.BLUE + 'Pretreating the image...' + gs.NORMAL)
 
         #### 0.8 - Sort slices
@@ -1270,24 +1308,15 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
         print(gs.BLUE + 'Detecting all the bead objects...' + gs.NORMAL)
         Td = time.time()
 
-        #### 1.1 - Check if a _Results.txt exists and import it if it's the case
-        # resFilePath = fP[:-4] + '_Results.txt'
-        resFileImported = False
-        
+        #### 1.1 - Import the _Results.txt file
         resFilePath = fP[:-4] + '_Results.txt'
         PTL.importBeadsDetectResult(resFilePath)
-        resFileImported = True
         
 
         #### 1.2 - Detect the beads
-        # Detect the beads and create the BeadsDetectResult dataframe [if no file has been loaded before]
-        # OR input the results in each Frame objects [if the results have been loaded at the previous step]
-        PTL.detectBeads(resFileImported)
-
-        #### 1.3 - Save the new results if necessary
-        if not resFileImported:
-            PTL.saveBeadsDetectResult(path=resFilePath)
-
+        # Input the results in each Frame objects [the results have been loaded at the previous step]
+        PTL.detectBeads()
+            
         print(gs.BLUE + 'OK! dT = {:.3f}'.format(time.time()-Td) + gs.NORMAL)
 
 
@@ -1298,15 +1327,15 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
         Tt = time.time()
 
         #### 2.1 - Check if some trajectories exist already
-        trajDirRaw = os.path.join(PathResultsDir, 'Trajectories_raw')
-        if not os.path.exists(trajDirRaw):
-            os.mkdir(trajDirRaw)
-        trajFilesExist_global = False
+        
+            
+        # trajFilesExist_global = False
         trajFilesImported = False
         trajFilesExist_sum = 0
         
         if redoAllSteps:
             pass
+        
         else:
             allTrajPaths = [os.path.join(trajDirRaw, f[:-4] + '_rawTraj' + str(iB) + '' + '_PY.csv') for iB in range(PTL.NB)]
             allTrajPaths += [os.path.join(trajDirRaw, f[:-4] + '_rawTraj' + str(iB) + '_In' + '_PY.csv') for iB in range(PTL.NB)]
@@ -1321,17 +1350,20 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
             trajPaths = allTrajPaths[trajFilesExist]
             for iB in range(PTL.NB):
                 PTL.importTrajectories(trajPaths[iB], iB)
-                # print(PTL.listTrajectories[iB].dict['X'][0], PTL.listTrajectories[iB].dict['X'][1])
             print(gs.GREEN + 'Raw traj files found and imported :)' + gs.NORMAL)
 
         #### 2.3 - If no, compute them by tracking the beads
         if not trajFilesImported:
-            issue = PTL.buildTrajectories(trackAll = trackAll) 
+            outcome = PTL.buildTrajectories(trackAll = trackAll) 
+            
             # Main tracking function !
-            if issue == 'Bug':
+            if outcome == 'Bug':
                 continue
             else:
                 pass
+        
+        #### Optional useful plot
+        # PTL.plot_computed_trajectories()
 
         #### 2.4 - Save the user inputs
         PTL.saveLog(display = 0, save = True, path = logFilePath)
@@ -1380,11 +1412,11 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
         HDZfactor = PTL.listTrajectories[0].HDZfactor
         
         depthoPath = PathDeptho
-        deptho_root = '_'.join(depthoPath.split('_')[:-1])
+        deptho_root = '.'.join(depthoPath.split('.')[:-1])
         deptho = io.imread(depthoPath)
-        depthoMetadata = pd.read_csv(deptho_root+'_Metadata.csv', sep=';')
-        depthoStep = depthoMetadata.loc[0,'step']
-        depthoZFocus = depthoMetadata.loc[0,'focus']
+        depthoMetadata = pd.read_csv(deptho_root + '_Metadata.csv', sep=';')
+        depthoStep = depthoMetadata.loc[0, 'step']
+        depthoZFocus = depthoMetadata.loc[0, 'focus']
 
         # increase the resolution of the deptho with interpolation
         # print('deptho shape check')
@@ -1432,7 +1464,7 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
             for iB in range(PTL.NB):
                 traj = PTL.listTrajectories[iB]
                 traj_df = pd.DataFrame(traj.dict)
-                trajPathRaw = os.path.join(PathResultsDir, 'Trajectories_raw', f[:-4] + '_rawTraj' + str(iB) + '_' + traj.beadInOut + '_PY.csv')
+                trajPathRaw = os.path.join(trajDirRaw, f[:-4] + '_rawTraj' + str(iB) + '_' + traj.beadInOut + '_PY.csv')
                 traj_df.to_csv(trajPathRaw, sep = '\t', index = False)
 
         #### 4.4 - Keep only the best std data in the trajectories
@@ -1445,13 +1477,9 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
             for iB in range(PTL.NB):
                 traj = PTL.listTrajectories[iB]
                 traj_df = pd.DataFrame(traj.dict)
-                trajPath = os.path.join(PathResultsDir, 'Trajectories', f[:-4] + '_traj' + str(iB) + '_' + traj.beadInOut + '_PY.csv')
+                trajPath = os.path.join(trajDir, f[:-4] + '_traj' + str(iB) + '_' + traj.beadInOut + '_PY.csv')
                 traj_df.to_csv(trajPath, sep = '\t', index = False)
                 
-                # save in ownCloud
-                # if ownCloud_timeSeriesDataDir != '':
-                #     OC_trajPath = os.path.join(ownCloud_timeSeriesDataDir, 'Trajectories', f[:-4] + '_traj' + str(iB) + '_' + traj.beadInOut + '_PY.csv')
-                #     traj_df.to_csv(OC_trajPath, sep = '\t', index = False)
     
     
     #### 5. Define pairs and compute distances
@@ -1535,7 +1563,7 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     print(gs.BLUE + str(time.time()-start) + gs.NORMAL)
     print(gs.BLUE + '\n' + gs.NORMAL)
 
-    plt.close('all')
+    # plt.close('all')
 
 
     #     #### 7.2 - Return the last objects, for optional verifications
@@ -1605,23 +1633,6 @@ class BeadDeptho:
         # Aggregate the different validity test (for now only 1)
         validBead = testImageSize
 
-        # If the bead is valid we can proceed
-        if validBead:
-            # Detect or infer the size of the beads we are measuring
-            if self.beadType == 'detect' or self.D0 == 0:
-                counts, binEdges = np.histogram(self.I[self.z_max,my:My,mx:Mx].ravel(), bins=256)
-                peaks, peaksProp = find_peaks(counts, height=100, threshold=None, distance=None, prominence=None, \
-                                   width=None, wlen=None, rel_height=0.5, plateau_size=None)
-                peakThreshVal = 1000
-                if counts[peaks[0]] > peakThreshVal:
-                    self.D0 = 4.5
-                    self.beadType = 'M450'
-                else:
-                    self.D0 = 2.7
-                    self.beadType = 'M270'
-        else:
-            self.validBead = False
-
         if validBead:
             for z in range(self.bestZ, -1, -1):
                 if not z in self.S0:
@@ -1631,6 +1642,7 @@ class BeadDeptho:
                 if not z in self.S0:
                     break
             zLast = z-1
+
 
             roughSize = int(np.floor(1.15*self.D0*self.scale))
             roughSize += 1 + roughSize%2
@@ -2032,7 +2044,7 @@ def depthoMaker(dictPaths, dictConstants):
         S0 = resDf['Slice'].values
         bestZ = S0[np.argmax(resDf['StdDev'].values)] - 1 # The index of the image with the highest Std
         # This image will be more or less the one with the brightest spot
-
+        
         # Create the BeadDeptho object
         BD = BeadDeptho(I, X0, Y0, S0, bestZ, scale, bead_type, f)
 
