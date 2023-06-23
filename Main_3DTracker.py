@@ -26,7 +26,7 @@ from SimpleBeadTracker import mainTracker
 # %% Define paths
 
 dictPaths = {'PathRawDataDir' : 'C://Users//JosephVermeil//Desktop//TestCode_Raw',
-             'PathDeptho' : 'C://Users//JosephVermeil//Desktop//TestCode_Deptho//21.04.23_M1_M450_step20_100X_Deptho.tif',
+             'PathDeptho' : 'C://Users//JosephVermeil//Desktop//TestCode_Deptho//Deptho_21-04-23_M2_P1_C3.tif',
              'PathResultsDir' : 'C://Users//JosephVermeil//Desktop//TestCode_Output',
              }
 
@@ -47,7 +47,7 @@ dictConstants = {'bead_type' : 'M450', # 'M450' or 'M270'
 
 # %% Additionnal options
 
-dictOptions = {'redoAllSteps' : False, 
+dictOptions = {'redoAllSteps' : True, 
                  'trackAll' : False,
                  'timeLog' : True
                  }

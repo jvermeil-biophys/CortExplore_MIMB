@@ -27,7 +27,7 @@ from SimpleBeadTracker import depthoMaker
 
 dictPaths = {'PathZStacks' : 'C://Users//JosephVermeil//Desktop//TestCode_ZStacks',
              'PathDeptho' : 'C://Users//JosephVermeil//Desktop//TestCode_Deptho',
-             'NameDeptho' : 'Deptho_test.tif',
+             'NameDeptho' : 'Deptho_21-04-23_M2_P1_C3.tif',
              }
 
 
