@@ -18,29 +18,63 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
 
-# %% Imports
+# %% How to use this script
+
+"""
+1. Run the cell "1. Imports". If an error is returned, a common fix is to define 
+    the folder containing this script as your current working directory.
+2. In the cell "2. Define paths", fill the dictionnary with the corrects paths. 
+    Then run this cell.
+3. In the cell "3. Define constants", indicate the relevant values for 
+    the parameters that will be used in the program. Then run this cell.
+4. Finally, run the cell "4. Call depthoMaker()" without modifying it.
+"""
+
+# %% 1. Imports
 
 from SimpleBeadTracker import depthoMaker
 
 
-# %% Define paths
+# %% 2. Define paths
 
-dictPaths = {'PathZStacks' : 'C://Users//JosephVermeil//Desktop//TestCode_ZStacks',
-             'PathDeptho' : 'C://Users//JosephVermeil//Desktop//TestCode_Deptho',
-             'NameDeptho' : 'Deptho_21-04-23_M2_P1_C3.tif',
+dictPaths = {'PathZStacks' : './/Example_Data_2024//02_ZScans',
+             'PathDeptho'  : './/Example_Data_2024//03_Depthograph', # {os.getcwd()}
+             'NameDeptho'  : '23-09-11_Deptho.tif',
              }
 
+# =============================================================================
+# DESCRIPTION
+# 'PathZStacks' : the path to the folder containing your raw data, meaning your Z-stacks 
+#                 in .tif format, with the associated .txt files ("_Results.txt").
+# 'PathDeptho'  : the path to the folder where you want to save the depthograph data.
+# 'NameDeptho'  : the name you want to give to the depthograph (need to end with '.tif').
+# 
+# ATTENTION ! The default values are the one you need to analyse the example dataset.
+# =============================================================================
 
-# %% Define constants
+# %% 3. Define constants
 
-dictConstants = {'bead_type' : 'M450', # 'M450' or 'M270'
-                 'bead_diameter' : 4500, # nm
-                 'scale_pixel_per_um' : 15.8, # pixel/µm
+dictConstants = {'bead type' : 'M450', # 'M450' or 'M270'
+                 'scale pixel per um' : 15.8, # pixel/µm
                  'step' : 20, # nm
                  }
 
+# =============================================================================
+# DESCRIPTION
+# bead type                 : text
+#                             Identify the bead type. Default is M450.
+# 
+# scale pixel per um        : float
+#                             Scale of the objective in pixel per micron. 
+#                             Proceeding to a manual calibration when using 
+#                             a new microscope is very strongly recommended.
+# 
+# step                      : int
+#                             The step between each frame of the source Z-scans, in nm.
+#                             Our typical Z-scans are made of 401 frames with 20 nm steps.
+# =============================================================================
 
-# %% Call depthoMaker()
+# %% 4. Call depthoMaker()
 
 depthoMaker(dictPaths, dictConstants)
 

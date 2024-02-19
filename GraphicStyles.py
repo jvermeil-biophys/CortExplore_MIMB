@@ -180,7 +180,7 @@ SMALL_SIZE = 12
 MEDIUM_SIZE = 16
 BIGGER_SIZE = 20
 
-def set_default_options_jv():
+def set_default_fontsizes():
     plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
     plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
     plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels

@@ -17,21 +17,45 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
+# %% How to use this script
 
-# %% Imports
+"""
+1. Run the cell "1. Imports". If an error is returned, a common fix is to define 
+    the folder containing this script as your current working directory.
+2. In the cell "2. Define paths", fill the dictionnary with the corrects paths. 
+    Then run this cell.
+3. In the cell "3. Define constants", indicate the relevant values for 
+    the parameters that will be used in the program. Then run this cell.
+4. In the cell "4. Additionnal options", adjust the values of the settings accordingly.
+    Then run this cell.
+5. Finally, run the cell "5. Call mainTracker()" without modifying it.
+"""
+
+# %% 1. Imports
 
 from SimpleBeadTracker import mainTracker
 
 
-# %% Define paths
+# %% 2. Define paths
 
-dictPaths = {'PathRawDataDir' : 'C://Users//JosephVermeil//Desktop//TestCode_Raw',
-             'PathDeptho' : 'C://Users//JosephVermeil//Desktop//TestCode_Deptho//Deptho_21-04-23_M2_P1_C3.tif',
-             'PathResultsDir' : 'C://Users//JosephVermeil//Desktop//TestCode_Output',
+dictPaths = {'PathRawDataDir' : './/Example_Data_2024//01_Timelapses',
+             'PathDeptho'     : './/Example_Data_2024//03_Depthograph//23-09-11_Deptho.tif', # 
+             'PathResultsDir' : './/Example_Data_2024//04_Results',
              }
 
 
-# %% Define constants
+# =============================================================================
+# DESCRIPTION
+# 'PathRawDataDir' : the path to the folder containing your raw data, meaning 
+#                    your timelapses in .tif format, with the associated .txt 
+#                    files ("_Results.txt" and "Timepoints.txt").
+# 'PathDeptho'     : the path to the depthograph in .tif format.
+# 'PathResultsDir' : the path to the folder where you want to save the results.
+# 
+# ATTENTION ! The default values are the one you need to analyse the example dataset.
+# =============================================================================
+
+# %% 3. Define constants
 
 dictConstants = {'bead_type' : 'M450', # 'M450' or 'M270'
                  'bead_diameter' : 4500, # nm
@@ -44,16 +68,79 @@ dictConstants = {'bead_type' : 'M450', # 'M450' or 'M270'
                  'optical_index_correction' : 0.85, # ratio, without unit
                  }
 
+# =============================================================================
+# DESCRIPTION
+# bead type                 : text
+#                             Identify the bead type. Default is M450.
+# 
+# bead diameter             : int
+#                             Identify the bead diameter in nm. Need to be determined 
+#                             from a calibration for each new batch of beads.
+# 
+# normal field              : float
+#                             Uniform magnetic field applied to the chamber during 
+#                             the experiment, in mT. It is the *target* field. 
+#                             The actual field applied one might differ: see next parameter.
+# 
+# magnetic field correction : float
+#                             Corrective multiplicative coefficient to 'normal field' 
+#                             to take into account the actual magnetic field of the experiment. 
+#                             Example: one does an experiment with a "target" constant field at 5 mT. 
+#                             At the end of the experiment, one measures with a gaussmeter 
+#                             than the field was actually 5.1 mT. The 'magnetic field correction' 
+#                             will be 5.1 / 5 = 1.02.
+# 
+# multi images              : int
+#                             Number of Z-planes acquired per timepoint. Acquiring 
+#                             several Z-planes per timepoint increase the precision of Z-detection.
+#                             Default is 3.
+# 
+# multi image Z step        : int
+#                             Step in Z between each Z-planes if multi-image > 1, in nm.
+#                             Default is 500.
+# 
+# multi image Z direction   : text
+#                             Direction of the scan when acquiring several Z-planes 
+#                             per timepoint. Needs to be 'upward' or 'downward'.
+#                             Default is 'upward'.
+# 
+# scale pixel per um        : float
+#                             Scale of the objective in pixel per micron. 
+#                             Proceeding to a manual calibration when using 
+#                             a new microscope is very strongly recommended.
+# 
+# optical index correction  : float
+#                             Ratio of the optical index of the cell medium over 
+#                             the index of the immersion liquid. Crucial for Z-distances 
+#                             computation. When using an oil-objective and typical DMEM, 
+#                             optical index correction = 1.33/1.52 = 0.875. When using 
+#                             an air-objective and typical DMEM, optical index correction = 1.33/1.00 = 1.33. 
+# =============================================================================
 
-# %% Additionnal options
+# %% 4. Additionnal options
 
-dictOptions = {'redoAllSteps' : True, 
-                 'trackAll' : False,
-                 'timeLog' : True
-                 }
+dictOptions = {'redoAllSteps' : False, 
+               'timepoints' : True
+              }
+
+# =============================================================================
+# DESCRIPTION
+# redoAllSteps              : bool, default is False.
+#                             If False, the programm will use intermediate outputs 
+#                             to skip steps that would have already been performed, thus saving time
+#                             (for instance if you reanalyze a given movie for the second time).
+#                             If True, the programm will ignore these intermediate outputs and perform the full analysis.
+# 
+# timepoints                : bool, default is True.
+#                             If True, the programm will expect a "_Timepoints.txt" text file,
+#                             containing a single column of time points in ms, corresponding to every frame in the image file. 
+#                             This time column will be used to generate the results.
+#                             If False, the program will bypass this by generating a mock time column, 
+#                             with integers from 1 to N, N being the number of frames.
+# =============================================================================
 
 
-# %% Call mainTracker()
+# %% 5. Call mainTracker()
 
 mainTracker(dictPaths, dictConstants, **dictOptions)
 

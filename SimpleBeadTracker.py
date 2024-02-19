@@ -34,13 +34,18 @@ import pyautogui
 from scipy import interpolate
 
 from skimage import io, transform
-from scipy.signal import find_peaks, savgol_filter
+from scipy.signal import savgol_filter
 from scipy.optimize import linear_sum_assignment
 
 
 # 2. Local Imports
 import GraphicStyles as gs
 import UtilityFunctions as ufun
+
+
+# 3. Advanced settings
+
+K_CORRMAG = 1.0
 
 
 # %% (1) Tracker classes
@@ -69,19 +74,15 @@ class PincherTimeLapse:
 
     When a PincherTimeLapse is initialised, most of these variables are initialised to zero values.
     In order to compute the different fields, the following methods should be called in this order:
-    - ptl.checkIfBlackFrames() : detect if there are black images at the end of each loop in the time lapse and
-                                 classify them as not relevant by filling the appropriate fields.
-    - ptl.saveFluoAside() : save the fluo images in an other folder and classify them as not relevant
-                            for the rest of the image analysis.
-    - ptl.determineFramesStatus() : fill the status_frame and status_nUp column of the dictLog.
+    - PTL.determineFramesStatus() : fill the status_frame and status_nUp column of the dictLog.
                                     in the status_frame field: -1 means excluded ; 0 means singlet ; >0 means *position in* the n-uplet
                                     in the status_nUp field: -1 means excluded ; 0 means singlet ; >0 means *number of* the n-uplet
-    - ptl.saveMetaData() : Save the computed threshold along with a few other data.
-    - ptl.makeFramesList() : Initialize the frame list.
-    - ptl.detectBeads() : Detect all the beads or load their positions from a pre-existing '_Results.txt' file.
-    - ptl.buildTrajectories() : Do the tracking of the beads of interest, with the user help, or load pre-existing trajectories.
+    - PTL.saveMetaData() : Save the computed threshold along with a few other data.
+    - PTL.makeFramesList() : Initialize the frame list.
+    - PTL.detectBeads() : Detect all the beads or load their positions from a pre-existing '_Results.txt' file.
+    - PTL.buildTrajectories() : Do the tracking of the beads of interest, with the user help, or load pre-existing trajectories.
     [In the meantime, Z computations and neighbours detections are performed on the Trajectory objects]
-    - ptl.computeForces() : when the Trajectory objects are complete (with Z and neighbours), compute the forces.
+    - PTL.computeForces() : when the Trajectory objects are complete (with Z and neighbours), compute the forces.
                             Include recent corrections to the formula [October 2021].
     """
 
@@ -149,7 +150,7 @@ class PincherTimeLapse:
             elif self.Nuplet > 1:
                 A = np.arange(self.nS, dtype = int)
                 self.dictLog['status_frame'] = 1 + A%self.Nuplet
-                self.dictLog['status_nUp'] = A//self.Nuplet
+                self.dictLog['status_nUp'] = 1 + A//self.Nuplet
             
         else:
             expType = self.expType
@@ -162,7 +163,7 @@ class PincherTimeLapse:
                 elif self.Nuplet > 1:
                     A = np.arange(self.nS, dtype = int)
                     self.dictLog['status_frame'] = 1 + A%self.Nuplet
-                    self.dictLog['status_nUp'] = A//self.Nuplet
+                    self.dictLog['status_nUp'] = 1 + A//self.Nuplet
                     
             elif expType == 'other experiment type':
                 pass # Complete if needed
@@ -678,23 +679,24 @@ class PincherTimeLapse:
 
 
 
-    def computeForces(self, traj1, traj2, B0, D3, dx):
+    def computeForces(self, traj1, traj2, B0, D3, dx, k = K_CORRMAG):
         """
         """
 
         # Magnetization functions
-        def computeMag_M270(B):
-            M = 0.74257*1.05*1600 * (0.001991*B**3 + 17.54*B**2 + 153.4*B) / (B**2 + 35.53*B + 158.1)
+        def computeMag_M270(B, k = k):
+            M = k * 0.74257*1600 * (0.001991*B**3 + 17.54*B**2 + 153.4*B) / (B**2 + 35.53*B + 158.1)
             return(M)
 
-        def computeMag_M450(B):
-            M = 1.05*1600 * (0.001991*B**3 + 17.54*B**2 + 153.4*B) / (B**2 + 35.53*B + 158.1)
+        def computeMag_M450(B, k = k):
+            M = k * 1600 * (0.001991*B**3 + 17.54*B**2 + 153.4*B) / (B**2 + 35.53*B + 158.1)
             return(M)
 
         dict_fMag = {'M270' : computeMag_M270, 'M450' : computeMag_M450}
         dictBeadTypes = {2.7 : 'M270', 4.5 : 'M450'}
 
-        dictLogF = {'D3' : [], 'B0' : [], 'Btot_L' : [], 'Btot_R' : [], 'F00' : [], 'F0' : [], 'dF_L' : [], 'dF_R' : [], 'Ftot' : []}
+        dictLogF = {'D3' : [], 'B0' : [], 'Btot_L' : [], 'Btot_R' : [], 
+                    'F00' : [], 'F0' : [], 'dF_L' : [], 'dF_R' : [], 'Ftot' : []}
 
         # Correction functions
         def Bind_neighbour(B, D_BoI, neighbourType):
@@ -821,7 +823,6 @@ class Frame:
         return(text)
 
     def show(self, strech = True):
-        print(len(self.listBeads))
         fig, ax = plt.subplots(1,1)
 #         fig_size = plt.gcf().get_size_inches()
 #         fig.set_size_inches(2 * fig_size)
@@ -1214,15 +1215,14 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     PathResultsDir = dictPaths['PathResultsDir']
     
     dictOptions = {'redoAllSteps' : False, 
-                     'trackAll' : False,
-                     'timeLog' : True
+                     'timepoints' : True
                      }
     
     dictOptions.update(kwargs)
     
-    timeLog = dictOptions['timeLog']
+    timePoints = dictOptions['timepoints']
     redoAllSteps = dictOptions['redoAllSteps']
-    trackAll = dictOptions['trackAll']
+    trackAll = False
     
     #### 0.1 Create some new folders if necessary
     trajDirRaw = os.path.join(PathResultsDir, 'Trajectories_raw')
@@ -1263,7 +1263,7 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     
         #### 0.5 - Load field file
         timeFilePath = fP[:-4] + '_Timepoints.txt'
-        if timeLog == True:
+        if timePoints == True:
             fieldCols = ['T_abs']
             fieldDf = pd.read_csv(timeFilePath, sep = '\t', names = fieldCols) # '\t'
             N = len(fieldDf.T_abs.values)
@@ -1375,7 +1375,7 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
 
     #### 3. Qualify - Detect boi sizes and neighbours
 
-        #### 3.1 - Infer Boi sizes in the first image
+        #### 3.1 - Set BOI size
 
         if 'M450' in PTL.beadType:
             D = 4.5
@@ -1563,18 +1563,6 @@ def mainTracker(dictPaths, dictConstants, **kwargs):
     print(gs.BLUE + str(time.time()-start) + gs.NORMAL)
     print(gs.BLUE + '\n' + gs.NORMAL)
 
-    # plt.close('all')
-
-
-    #     #### 7.2 - Return the last objects, for optional verifications
-    # listTrajDicts = []
-    # for iB in range(PTL.NB):
-    #     listTrajDicts.append(PTL.listTrajectories[iB].dict)
-        
-    # return(timeSeries_DF, dfLogF)
-
-
-
 
 
 # %% (2) Depthograph making classes & functions
@@ -1600,31 +1588,27 @@ class BeadDeptho:
         self.fileName = fileName
 
         self.beadType = beadType
-        self.D0 = 4.5 * (beadType == 'M450') + 2.7 * (beadType == 'M270')
-        # self.threshold = threshold
+        dictD0 = {'M450':4.5, 'M270':2.7}
+        self.D0 = dictD0[beadType]
         self.I_cleanROI = np.array([])
-#         self.cleanROI = np.zeros((self.nz, 4), dtype = int)
 
         self.validBead = True
         self.iValid = -1
 
         self.bestZ = bestZ
-        self.validSlice = np.zeros(nz, dtype = bool)
+        # self.validSlice = np.zeros(nz, dtype = bool)
         self.zFirst = 0
         self.zLast = nz
         self.validDepth = nz
 
         self.valid_v = True
-        self.valid_h = True
         self.depthosDict = {}
         self.profileDict = {}
         self.ZfocusDict = {}
 
-
-    def buildCleanROI(self):
-        plot = 0
+    def buildCleanROI(self, plot = 0):
         # Determine if the bead is to close to the edge on the max frame
-        D0 = self.D0 + 4.5*(self.D0 == 0)
+        D0 = self.D0
         roughSize = np.floor(1.1*D0*self.scale)
         mx, Mx = np.min(self.X0 - 0.5*roughSize), np.max(self.X0 + 0.5*roughSize)
         my, My = np.min(self.Y0 - 0.5*roughSize), np.max(self.Y0 + 0.5*roughSize)
@@ -1632,6 +1616,9 @@ class BeadDeptho:
 
         # Aggregate the different validity test (for now only 1)
         validBead = testImageSize
+
+        # If the bead is valid we can proceed
+        self.validBead = validBead
 
         if validBead:
             for z in range(self.bestZ, -1, -1):
@@ -1643,208 +1630,171 @@ class BeadDeptho:
                     break
             zLast = z-1
 
-
-            roughSize = int(np.floor(1.15*self.D0*self.scale))
+            roughSize = int(np.floor(1.05*self.D0*self.scale))
             roughSize += 1 + roughSize%2
             roughCenter = int((roughSize+1)//2)
 
             cleanSize = ufun.getDepthoCleanSize(self.D0, self.scale)
-
             I_cleanROI = np.zeros([self.nz, cleanSize, cleanSize])
 
-            try:
-                for i in range(zFirst, zLast):
-                    xmi, ymi = self.XYm[i,0], self.XYm[i,1]
-                    x1, y1, x2, y2, validBead = ufun.getROI(roughSize, xmi, ymi, self.nx, self.ny)
-                    if not validBead:
-                        if x1 < 0 or x2 > self.nx:
-                            self.valid_h = False
-                        if y1 < 0 or y2 > self.ny:
-                            self.valid_v = False
-
-        #                 fig, ax = plt.subplots(1,2)
-        #                 ax[0].imshow(self.I[i])
-                    xm1, ym1 = xmi-x1, ymi-y1
-                    I_roughRoi = self.I[i,y1:y2,x1:x2]
-        #                 ax[1].imshow(I_roughRoi)
-        #                 fig.show()
-
-                    translation = (xm1-roughCenter, ym1-roughCenter)
-
-                    tform = transform.EuclideanTransform(rotation=0, \
-                                                         translation = (xm1-roughCenter, ym1-roughCenter))
-
-                    I_tmp = transform.warp(I_roughRoi, tform, order = 1, preserve_range = True)
-
-                    I_cleanROI[i] = np.copy(I_tmp[roughCenter-cleanSize//2:roughCenter+cleanSize//2+1,\
-                                                  roughCenter-cleanSize//2:roughCenter+cleanSize//2+1])
-
-                if not self.valid_v and not self.valid_h:
-                    self.validBead = False
-
-                else:
-                    self.zFirst = zFirst
-                    self.zLast = zLast
-                    self.validDepth = zLast-zFirst
-                    self.I_cleanROI = I_cleanROI.astype(np.uint16)
-
-                # VISUALISE
-                if plot >= 2:
-                    for i in range(zFirst, zLast, 50):
-                        self.plotROI(i)
-
-            except:
-                print('Error for the file: ' + self.fileName)
+            # try:
+            for i in range(zFirst, zLast):
+                xmi, ymi = self.XYm[i,0], self.XYm[i,1]
+                x1, y1, x2, y2, validBead = ufun.getROI(roughSize, xmi, ymi, self.nx, self.ny)
+                if not validBead:
+                    if y1 < 0 or y2 > self.ny:
+                        self.valid_v = False
 
 
-    def buildDeptho(self):
-        plot = 0
-        preferedDeptho = 'v'
+                xm1, ym1 = xmi-x1, ymi-y1
+                I_roughRoi = self.I[i,y1:y2,x1:x2]
+
+                translation = (xm1-roughCenter, ym1-roughCenter)
+
+                tform = transform.EuclideanTransform(rotation=0, translation = translation)
+
+                I_tmp = transform.warp(I_roughRoi, tform, order = 1, preserve_range = True)
+
+                I_cleanROI[i] = np.copy(I_tmp[roughCenter-cleanSize//2:roughCenter+cleanSize//2+1,\
+                                              roughCenter-cleanSize//2:roughCenter+cleanSize//2+1])
+
+            if not self.valid_v:
+                self.validBead = False
+
+            else:
+                self.zFirst = zFirst
+                self.zLast = zLast
+                self.validDepth = zLast-zFirst
+                self.I_cleanROI = I_cleanROI.astype(np.uint16)
+                
+            if self.validDepth < self.nz * (2/3):
+                self.validBead = False
+
+            # VISUALISE
+            if plot >= 2:
+                self.plotROI()
+                # for i in range(zFirst, zLast, 50):
+                #     self.plotROI(i)
+
+            # except:
+            #     print('Error for the file: ' + self.fileName)
+
+
+    def buildDeptho(self, nbPixToAvg = 5, interpolationFactor = 5):
         side_ROI = self.I_cleanROI.shape[1]
         mid_ROI = side_ROI//2
-        nbPixToAvg = 3 # Have to be an odd number
-        deptho_v = np.zeros([self.nz, side_ROI], dtype = np.float64)
-        deptho_h = np.zeros([self.nz, side_ROI], dtype = np.float64)
-        deptho_HD = np.zeros([self.nz, side_ROI*5], dtype = np.float64)
+        deptho_raw = np.zeros([self.nz, side_ROI], dtype = np.float64)
+        deptho_interp = np.zeros([self.nz, side_ROI*interpolationFactor], dtype = np.float64)
 
-        if self.valid_v:
+        if self.validBead:
             for z in range(self.zFirst, self.zLast):
-                templine = side_ROI
-                deptho_v[z] = self.I_cleanROI[z,:,mid_ROI] * (1/nbPixToAvg)
-                for i in range(1, 1 + nbPixToAvg//2):
-                    deptho_v[z] += self.I_cleanROI[z,:,mid_ROI - i] * (1/nbPixToAvg)
-                    deptho_v[z] += self.I_cleanROI[z,:,mid_ROI + i] * (1/nbPixToAvg)
-            deptho_v = deptho_v.astype(np.uint16)
-            self.depthosDict['deptho_v'] = deptho_v
+                # templine = side_ROI
+                deptho_raw[z] = self.I_cleanROI[z,:,mid_ROI] * (1/nbPixToAvg) # nbPixToAvg has to be an odd number
+                for i in range(1, 1 + nbPixToAvg//2): # nbPixToAvg has to be an odd number
+                    deptho_raw[z] += self.I_cleanROI[z,:,mid_ROI - i] * (1/nbPixToAvg)
+                    deptho_raw[z] += self.I_cleanROI[z,:,mid_ROI + i] * (1/nbPixToAvg)
+            deptho_raw = deptho_raw.astype(np.uint16)
+            self.depthosDict['deptho_raw'] = deptho_raw
 
-        if self.valid_h:
+
             for z in range(self.zFirst, self.zLast):
-                templine = side_ROI
-                deptho_h[z] = self.I_cleanROI[z,mid_ROI,:] * (1/nbPixToAvg)
+                xmin, xmax = mid_ROI - nbPixToAvg//2, mid_ROI + nbPixToAvg//2 + 1 # width = nbPixToAvg
+                vals = self.I_cleanROI[z, :, xmin:xmax] # width = nbPixToAvg
+    
+                vals_new = ufun.resize_2Dinterp(vals, fx=1, fy=interpolationFactor) # height = cleanSize * interpolationFactor
+                
+                deptho_interp[z] = vals_new[:,nbPixToAvg//2] * (1/nbPixToAvg)
                 for i in range(1, 1 + nbPixToAvg//2):
-                    deptho_h[z] += self.I_cleanROI[z,mid_ROI - i,:] * (1/nbPixToAvg)
-                    deptho_h[z] += self.I_cleanROI[z,mid_ROI + i,:] * (1/nbPixToAvg)
-            deptho_h = deptho_h.astype(np.uint16)
-            self.depthosDict['deptho_h'] = deptho_h
+                    deptho_interp[z] += vals_new[:,nbPixToAvg//2-i] * (1/nbPixToAvg)
+                    deptho_interp[z] += vals_new[:,nbPixToAvg//2+i] * (1/nbPixToAvg)
 
-        if preferedDeptho == 'v' and not self.valid_v:
-            hdDeptho = 'h'
-        elif preferedDeptho == 'h' and not self.valid_h:
-            hdDeptho = 'v'
-        else:
-            hdDeptho = preferedDeptho
-
-        if hdDeptho == 'v':
-            for z in range(self.zFirst, self.zLast):
-                x = np.arange(mid_ROI - 2, mid_ROI + 3)
-                y = np.arange(0, side_ROI)
-#                 xx, yy = np.meshgrid(x, y)
-                vals = self.I_cleanROI[z, :, mid_ROI-2:mid_ROI+3]
-                f = interpolate.interp2d(x, y, vals, kind='cubic')
-                # Now use the obtained interpolation function and plot the result:
-
-                xnew = x
-                ynew = np.arange(0, side_ROI, 0.2)
-                vals_new = f(xnew, ynew)
-                deptho_HD[z] = vals_new[:,5//2] * (1/nbPixToAvg)
-                for i in range(1, 1 + nbPixToAvg//2):
-                    deptho_HD[z] += vals_new[:,5//2-i] * (1/nbPixToAvg)
-                    deptho_HD[z] += vals_new[:,5//2+i] * (1/nbPixToAvg)
-#                 if z == self.z_max:
-#                     figInterp, axesInterp = plt.subplots(1,2)
-#                     axesInterp[0].imshow(vals)
-#                     axesInterp[0].plot([5//2, 5//2], [0, vals.shape[0]], 'r--')
-#                     axesInterp[1].imshow(vals_new)
-#                     axesInterp[1].plot([5//2, 5//2], [0, vals_new.shape[0]], 'r--')
-#                     figInterp.show()
-            deptho_HD = deptho_HD.astype(np.uint16)
-            self.depthosDict['deptho_HD'] = deptho_HD
-
-        elif hdDeptho == 'h':
-            for z in range(self.zFirst, self.zLast):
-                x = np.arange(0, side_ROI)
-                y = np.arange(mid_ROI - 2, mid_ROI + 3)
-#                 xx, yy = np.meshgrid(x, y)
-                vals = self.I_cleanROI[z, mid_ROI-2:mid_ROI+3, :]
-                f = interpolate.interp2d(x, y, vals, kind='cubic')
-                # Now use the obtained interpolation function and plot the result:
-
-                xnew = np.arange(0, side_ROI, 0.2)
-                ynew = y
-                vals_new = f(xnew, ynew)
-                deptho_HD[z] = vals_new[5//2,:] * (1/nbPixToAvg)
-                for i in range(1, 1 + nbPixToAvg//2):
-                    deptho_HD[z] += vals_new[5//2-i,:] * (1/nbPixToAvg)
-                    deptho_HD[z] += vals_new[5//2+i,:] * (1/nbPixToAvg)
-#                 if z == self.z_max:
-#                     figInterp, axesInterp = plt.subplots(1,2)
-#                     axesInterp[0].imshow(vals)
-#                     axesInterp[0].plot([0, vals.shape[1]], [5//2, 5//2], 'r--')
-#                     axesInterp[1].imshow(vals_new)
-#                     axesInterp[1].plot([0, vals_new.shape[1]], [5//2, 5//2], 'r--')
-#                     figInterp.show()
-            deptho_HD = deptho_HD.astype(np.uint16)
-            self.depthosDict['deptho_HD'] = deptho_HD
-
-        # 3D caracterisation
-#         I_binary = np.zeros([self.I_cleanROI.shape[0], self.I_cleanROI.shape[1], self.I_cleanROI.shape[2]])
-#         I_binary[self.zFirst:self.zLast] = (self.I_cleanROI[self.zFirst:self.zLast] > self.threshold)
-#         Zm3D, Ym3D, Xm3D = ndi.center_of_mass(self.I_cleanROI, labels=I_binary, index=1)
-#         self.ZfocusDict['Zm3D'] = Zm3D
+            deptho_interp = deptho_interp.astype(np.uint16)
+            self.depthosDict['deptho_interp'] = deptho_interp
 
         # Raw profiles
-        mid_ROI_HD = deptho_HD.shape[1]//2
         Z = np.array([z for z in range(self.I_cleanROI.shape[0])])
-#         intensity_tot = np.array([np.sum(self.I_cleanROI[z][I_binary[z].astype(bool)])/(1+np.sum(I_binary[z])) for z in range(self.I_cleanROI.shape[0])]).astype(np.float64)
-        intensity_v = np.array([np.sum(deptho_v[z,:])/side_ROI for z in range(deptho_v.shape[0])]).astype(np.float64)
-        intensity_h = np.array([np.sum(deptho_h[z,:])/side_ROI for z in range(deptho_h.shape[0])]).astype(np.float64)
-        intensity_HD = np.array([np.sum(deptho_HD[z,mid_ROI_HD-5:mid_ROI_HD+6])/11 for z in range(deptho_HD.shape[0])]).astype(np.float64)
-#
-        Zm_v, Zm_h = np.argmax(intensity_v), np.argmax(intensity_h)
-#         Zm_tot = np.argmax(intensity_tot)
-        Zm_HD = np.argmax(intensity_HD)
+        mid_ROI_raw = deptho_raw.shape[1]//2
+        intensity_raw = np.array([np.sum(deptho_raw[z,mid_ROI_raw-2:mid_ROI_raw+3])/5 
+                                  for z in range(deptho_raw.shape[0])]).astype(np.float64)
+        mid_ROI_interp = deptho_interp.shape[1]//2
+        intensity_interp = np.array([np.sum(deptho_interp[z,mid_ROI_interp-2:mid_ROI_interp+3])/5 
+                                     for z in range(deptho_interp.shape[0])]).astype(np.float64)
+        
+        self.profileDict['intensity_raw'] = intensity_raw
+        self.profileDict['intensity_interp'] = intensity_interp
+            
+    
+    def computeFocus(self, plot = 0):
+        if plot >= 1:
+            fig, axes = plt.subplots(1, 2)
+            fig.suptitle('Focus')
+        
+        # raw
+        nz, nx = self.depthosDict['deptho_raw'].shape
+        
+        Zm_intensity_raw = np.argmax(self.profileDict['intensity_raw'])
+        intensity_raw_smooth = savgol_filter(self.profileDict['intensity_raw'], 101, 5)
+        Zm_intensity_raw_smooth = np.argmax(intensity_raw_smooth)
+        self.ZfocusDict['Zm_intensity_raw'] = Zm_intensity_raw_smooth
+        
+        STD_raw = np.std(self.depthosDict['deptho_raw'], axis = 1)
+        STD_raw_smooth = savgol_filter(STD_raw, 101, 5)
+        Zm_STD_raw = np.argmax(STD_raw_smooth)
+        self.ZfocusDict['Zm_STD_raw'] = Zm_STD_raw
+        
+        if plot >= 1:
+            Z = np.arange(nz)
+            ax1 = axes[0]
+            ax2 = ax1.twinx()
+            
+            ax1.plot(Z, self.profileDict['intensity_raw'], label='intensity_raw', color='k', ls='-')
+            ax1.plot(Z, intensity_raw_smooth, label='intensity_raw_smooth', color='cyan', ls='-')
+            ax1.axvline(Zm_intensity_raw_smooth, label='Zm_intensity_raw', color='b', ls='--')
+            
+            ax2.plot([], [], label='intensity_raw', color='k', ls='-')
+            ax2.plot([], [], label='intensity_raw_smooth', color='cyan', ls='-')
+            ax2.plot([], [], label='Zm_intensity_raw = {:.3f}'.format(Zm_intensity_raw), color='b', ls='--')
+            ax2.plot(Z, STD_raw, label='STD_raw', color='orange', ls='-')
+            ax2.plot(Z, STD_raw_smooth, label='STD_raw_smooth', color='red', ls='-')
+            ax2.axvline(Zm_STD_raw, label='Zm_STD_raw = {:.3f}'.format(Zm_STD_raw), color='darkred', ls='--')
+            
+            ax2.legend()
+        
+        # interp
+        nz, nx = self.depthosDict['deptho_interp'].shape
+        
+        Zm_intensity_interp = np.argmax(self.profileDict['intensity_interp'])
+        intensity_interp_smooth = savgol_filter(self.profileDict['intensity_interp'], 101, 5)
+        Zm_intensity_interp_smooth = np.argmax(intensity_interp_smooth)
+        self.ZfocusDict['Zm_intensity_interp'] = Zm_intensity_interp_smooth
+        
+        STD_interp = np.std(self.depthosDict['deptho_interp'], axis = 1)
+        STD_interp_smooth = savgol_filter(STD_interp, 101, 5)
+        Zm_STD_interp = np.argmax(STD_interp_smooth)
+        self.ZfocusDict['Zm_STD_interp'] = Zm_STD_interp        
+        
+        if plot >= 1:
+            Z = np.arange(nz)
+            ax1 = axes[1]
+            ax2 = ax1.twinx()
+            
+            ax1.plot(Z, self.profileDict['intensity_interp'], label='intensity_interp', color='k', ls='-')           
+            ax1.plot(Z, intensity_interp_smooth, label='intensity_interp_smooth', color='cyan', ls='-')
+            ax1.axvline(Zm_intensity_interp_smooth, label='Zm_intensity_raw', color='b', ls='--')
+            
+            ax2.plot([], [], label='intensity_interp', color='k', ls='-')
+            ax2.plot([], [], label='intensity_interp_smooth', color='cyan', ls='-')
+            ax2.plot([], [], label='Zm_intensity_interp = {:.3f}'.format(Zm_intensity_interp), color='b', ls='--')
+            ax2.plot(Z, STD_interp, label='STD_interp', color='orange', ls='-')
+            ax2.plot(Z, STD_interp_smooth, label='STD_interp_smooth', color='red', ls='-')
+            ax2.axvline(Zm_STD_interp, label='Zm_STD_interp = {:.3f}'.format(Zm_STD_interp), color='darkred', ls='--')
+            
+            ax2.legend()
+            plt.tight_layout()
+            plt.show()
 
-        self.profileDict['intensity_v'] = intensity_v
-        self.profileDict['intensity_h'] = intensity_h
-        self.profileDict['intensity_HD'] = intensity_HD
-#         self.profileDict['intensity_tot'] = intensity_tot
-        self.ZfocusDict['Zm_v'] = Zm_v
-        self.ZfocusDict['Zm_h'] = Zm_h
-        self.ZfocusDict['Zm_HD'] = Zm_HD
-#         self.ZfocusDict['Zm_tot'] = Zm_tot
 
-
-        # Smoothed profiles
-        Z_hd = np.arange(0, self.I_cleanROI.shape[0], 0.2)
-        intensity_v_hd = np.interp(Z_hd, Z, intensity_v)
-        intensity_h_hd = np.interp(Z_hd, Z, intensity_h)
-        intensity_HD_hd = np.interp(Z_hd, Z, intensity_HD)
-#         intensity_tot_hd = np.interp(Z_hd, Z, intensity_tot)
-
-        intensity_v_smooth = savgol_filter(intensity_v_hd, 101, 5)
-        intensity_h_smooth = savgol_filter(intensity_h_hd, 101, 5)
-        intensity_HD_smooth = savgol_filter(intensity_HD_hd, 101, 5)
-#         intensity_tot_smooth = savgol_filter(intensity_tot_hd, 101, 5)
-
-        Zm_v_hd, Zm_h_hd = Z_hd[np.argmax(intensity_v_smooth)], Z_hd[np.argmax(intensity_h_smooth)]
-#         Zm_tot_hd = Z_hd[np.argmax(intensity_tot_smooth)]
-        Zm_HD_hd = Z_hd[np.argmax(intensity_HD_smooth)]
-
-        self.profileDict['intensity_v_smooth'] = intensity_v_smooth
-        self.profileDict['intensity_h_smooth'] = intensity_h_smooth
-        self.profileDict['intensity_HD_smooth'] = intensity_HD_smooth
-#         self.profileDict['intensity_tot_smooth'] = intensity_tot_smooth
-        self.ZfocusDict['Zm_v_hd'] = Zm_v_hd
-        self.ZfocusDict['Zm_h_hd'] = Zm_h_hd
-        self.ZfocusDict['Zm_HD_hd'] = Zm_HD_hd
-#         self.ZfocusDict['Zm_tot_hd'] = Zm_tot_hd
-
-        # VISUALISE
-        if plot >= 2:
-            self.plotProfiles()
-
-
-    def saveBeadDeptho(self, path, ID, step, bestDetphoType = 'HD', bestFocusType = 'HD_hd'):
+    def saveBeadDeptho(self, path, ID, step, bestDetphoType = 'interp', bestFocusType = 'STD_interp'):
         supDataDir = ID + '_supData'
         supDataDirPath = os.path.join(path, supDataDir)
         if not os.path.exists(supDataDirPath):
@@ -1854,15 +1804,10 @@ class BeadDeptho:
         cleanROIPath = os.path.join(path, cleanROIName)
         io.imsave(cleanROIPath, self.I_cleanROI, check_contrast=False)
 
-        profilesRaw_keys = ['intensity_v', 'intensity_h', 'intensity_HD'] #, 'intensity_tot']
+        profilesRaw_keys = ['intensity_raw', 'intensity_interp'] #, 'intensity_tot']
         profileDictRaw = {k: self.profileDict[k] for k in profilesRaw_keys}
         profileDictRaw_df = pd.DataFrame(profileDictRaw)
         profileDictRaw_df.to_csv(os.path.join(supDataDirPath, 'profiles_raw.csv'))
-
-        profilesSmooth_keys = ['intensity_v_smooth', 'intensity_h_smooth', 'intensity_HD_smooth'] #, 'intensity_tot_smooth']
-        profileDictSmooth = {k: self.profileDict[k] for k in profilesSmooth_keys}
-        profileDictSmooth_df = pd.DataFrame(profileDictSmooth)
-        profileDictSmooth_df.to_csv(os.path.join(supDataDirPath, 'profiles_smooth.csv'))
 
         ZfocusDict_df = pd.DataFrame(self.ZfocusDict, index = [1])
         ZfocusDict_df.to_csv(os.path.join(supDataDirPath, 'Zfoci.csv'))
@@ -1892,18 +1837,18 @@ class BeadDeptho:
         fig, ax = plt.subplots(1,1)
         pStart, pStop = np.percentile(self.I[self.z_max], (1, 99))
         ax.imshow(self.I[self.z_max], cmap = 'gray', vmin = pStart, vmax = pStop)
-        ax.plot(self.XYm[self.validSlice,0],self.XYm[self.validSlice,1],'r-')
+        ax.plot(self.XYm[self.zFirst:self.zLast, 0], self.XYm[self.zFirst:self.zLast, 1],'r-')
         fig.show()
 
     def plotROI(self, i = 'auto'):
         if i == 'auto':
-            i = self.z_max
+            i = self.bestZ
 
-        fig, ax = plt.subplots(1,3, figsize = (16,4))
+        fig, ax = plt.subplots(1,2, figsize = (16,4))     
 
-        xm, ym = np.mean(self.XYm[self.validSlice,0]),  np.mean(self.XYm[self.validSlice,1])
-        ROIsize_x = self.D*1.25*self.scale + (max(self.XYm[self.validSlice,0])-min(self.XYm[self.validSlice,0]))
-        ROIsize_y = self.D*1.25*self.scale + (max(self.XYm[self.validSlice,1])-min(self.XYm[self.validSlice,1]))
+        xm, ym = np.mean(self.XYm[self.zFirst:self.zLast,0]),  np.mean(self.XYm[self.zFirst:self.zLast,1])
+        ROIsize_x = self.D0*1.25*self.scale + (max(self.XYm[self.zFirst:self.zLast, 0]) - min(self.XYm[self.zFirst:self.zLast, 0]))
+        ROIsize_y = self.D0*1.25*self.scale + (max(self.XYm[self.zFirst:self.zLast, 1]) - min(self.XYm[self.zFirst:self.zLast, 1]))
         x1_ROI, y1_ROI, x2_ROI, y2_ROI = int(xm - ROIsize_x//2), int(ym - ROIsize_y//2), int(xm + ROIsize_x//2), int(ym + ROIsize_y//2)
 
         pStart, pStop = np.percentile(self.I[i], (1, 99))
@@ -1916,80 +1861,16 @@ class BeadDeptho:
         I_ROI = self.I[i,y1_ROI:y2_ROI,x1_ROI:x2_ROI]
         pStart, pStop = np.percentile(I_ROI, (1, 99))
         ax[1].imshow(I_ROI, cmap = 'gray', vmin = pStart, vmax = pStop)
-        ax[1].plot(self.XYm[self.validSlice,0]-x1_ROI, self.XYm[self.validSlice,1]-y1_ROI, 'r-', lw=0.75)
+        ax[1].plot(self.XYm[self.zFirst:self.zLast,0]-x1_ROI, self.XYm[self.zFirst:self.zLast,1]-y1_ROI, 'r-', lw=0.75)
         ax[1].plot(self.XYm[i,0]-x1_ROI, self.XYm[i,1]-y1_ROI, 'b+', lw=0.75)
-
-        pStart, pStop = np.percentile(self.I_cleanROI[i], (1, 99))
-        mid = self.I_cleanROI[i].shape[0]//2
-        I_cleanROI_binary = (self.I_cleanROI[i] > self.threshold)
-        y, x = ndi.center_of_mass(self.I_cleanROI[i], labels=I_cleanROI_binary, index=1)
-        ax[2].imshow(self.I_cleanROI[i], cmap = 'gray', vmin = pStart, vmax = pStop)
-        ax[2].plot([0,2*mid],[mid, mid], 'r--', lw = 0.5)
-        ax[2].plot([mid, mid],[0,2*mid], 'r--', lw = 0.5)
-        ax[2].plot([x],[y], 'b+')
-        fig.show()
-
-    def plotProfiles(self):
-        Z = np.array([z for z in range(self.I_cleanROI.shape[0])])
-        Z_hd = np.arange(0, self.I_cleanROI.shape[0], 0.2)
-        intensity_v = self.profileDict['intensity_v']
-        intensity_h = self.profileDict['intensity_h']
-        intensity_HD = self.profileDict['intensity_HD']
-        # intensity_tot = self.profileDict['intensity_tot']
-        Zm_v = self.ZfocusDict['Zm_v']
-        Zm_h = self.ZfocusDict['Zm_h']
-        Zm_HD = self.ZfocusDict['Zm_HD']
-        # Zm_tot = self.ZfocusDict['Zm_tot']
-        intensity_v_smooth = self.profileDict['intensity_v_smooth']
-        intensity_h_smooth = self.profileDict['intensity_h_smooth']
-        intensity_HD_smooth = self.profileDict['intensity_HD_smooth']
-        intensity_tot_smooth = self.profileDict['intensity_tot_smooth']
-        Zm_v_hd = self.ZfocusDict['Zm_v_hd']
-        Zm_h_hd = self.ZfocusDict['Zm_h_hd']
-        Zm_HD_hd = self.ZfocusDict['Zm_HD_hd']
-        # Zm_tot_hd = self.ZfocusDict['Zm_tot_hd']
-
-        fig, ax = plt.subplots(1,2, figsize = (12, 4))
-        ax[0].plot(Z, intensity_v)
-        ax[1].plot(Z, intensity_h)
-        # ax[2].plot(Z, (intensity_tot))
-        ax[0].plot([Zm_v, Zm_v], [0, ax[0].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_v = {:.2f}'.format(Zm_v))
-        ax[1].plot([Zm_h, Zm_h], [0, ax[1].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_h = {:.2f}'.format(Zm_h))
-        # ax[2].plot([Zm_tot, Zm_tot], [0, ax[2].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_tot = {:.2f}'.format(Zm_tot))
-        ax[0].legend(loc = 'lower right')
-        ax[1].legend(loc = 'lower right')
-        # ax[2].legend(loc = 'lower right')
-
-        # fig, ax = plt.subplots(1,4, figsize = (16, 4))
-        # ax[0].plot(Z, intensity_v, 'b-')
-        # ax[1].plot(Z, intensity_h, 'b-')
-        # ax[2].plot(Z, intensity_HD, 'b-')
-        # ax[3].plot(Z, (intensity_tot), 'b-')
-        # ax[0].plot(Z_hd, intensity_v_smooth, 'k--')
-        # ax[1].plot(Z_hd, intensity_h_smooth, 'k--')
-        # ax[2].plot(Z_hd, intensity_HD_smooth, 'k--')
-        # ax[3].plot(Z_hd, intensity_tot_smooth, 'k--')
-        # ax[0].plot([Zm_v_hd, Zm_v_hd], [0, ax[0].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_v_hd = {:.2f}'.format(Zm_v_hd))
-        # ax[1].plot([Zm_h_hd, Zm_h_hd], [0, ax[1].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_h_hd = {:.2f}'.format(Zm_h_hd))
-        # ax[2].plot([Zm_HD_hd, Zm_HD_hd], [0, ax[2].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_HD_hd = {:.2f}'.format(Zm_HD_hd))
-        # ax[3].plot([Zm_tot_hd, Zm_tot_hd], [0, ax[3].get_ylim()[1]], 'r--', lw = 0.8, label = 'Zm_tot_hd = {:.2f}'.format(Zm_tot_hd))
-        # ax[0].legend(loc = 'lower right')
-        # ax[1].legend(loc = 'lower right')
-        # ax[2].legend(loc = 'lower right')
-        # ax[3].legend(loc = 'lower right')
-
-        #         print('Zm_v = {:.2f}, Zm_h = {:.2f}, Zm_tot = {:.2f}'\
-        #               .format(Zm_v, Zm_h, Zm_tot))
-        #         print('Zm_v_hd = {:.2f}, Zm_h_hd = {:.2f}, Zm_tot_hd = {:.2f}'\
-        #               .format(Zm_v_hd, Zm_h_hd, Zm_tot_hd))
-
+        
         fig.show()
 
 
-    def plotDeptho(self, d = 'HD'):
+    def plotDeptho(self, d = '_interp'):
         fig, ax = plt.subplots(1,1, figsize = (4, 6))
         D = self.depthosDict['deptho_' + d]
-        z_focus = self.ZfocusDict['Zm_' + d + '_hd']
+        z_focus = self.ZfocusDict['Zm_' + d + '_interp']
         ny, nx = D.shape[0], D.shape[1]
         pStart, pStop = np.percentile(D, (1, 99))
         pStop = pStop + 0.3 * (pStop-pStart)
@@ -2003,20 +1884,23 @@ class BeadDeptho:
         fig.suptitle('File ' + self.fileName + ' - Bead ' + str(self.iValid))
         fig.show()
 
+
 # %%%% depthoMaker
 
-# def depthoMaker(dirPath, savePath, specif, saveLabel, scale, beadType = 'M450', step = 20, d = 'HD', plot = 0):
+
 def depthoMaker(dictPaths, dictConstants):
         
     PathZStacks = dictPaths['PathZStacks']
     PathDeptho = dictPaths['PathDeptho']
     NameDeptho = dictPaths['NameDeptho']
     
-    bead_type = dictConstants['bead_type']
-    scale = dictConstants['scale_pixel_per_um']
+    bead_type = dictConstants['bead type']
+    scale = dictConstants['scale pixel per um']
     step = dictConstants['step']
     
-    deptho_type = 'HD'
+    #### SETTINGS
+    bestDetphoType = 'interp'
+    bestFocusType = 'intensity_interp'
     
     rawFileList = os.listdir(PathZStacks)
     listFileNames = [f[:-4] for f in rawFileList if (os.path.isfile(os.path.join(PathZStacks, f)) and f.endswith(".tif"))]
@@ -2044,7 +1928,7 @@ def depthoMaker(dictPaths, dictConstants):
         S0 = resDf['Slice'].values
         bestZ = S0[np.argmax(resDf['StdDev'].values)] - 1 # The index of the image with the highest Std
         # This image will be more or less the one with the brightest spot
-        
+
         # Create the BeadDeptho object
         BD = BeadDeptho(I, X0, Y0, S0, bestZ, scale, bead_type, f)
 
@@ -2058,58 +1942,55 @@ def depthoMaker(dictPaths, dictConstants):
 
         # Else, we can proceed.
         else:
-            print(gs.BLUE + 'Job done for the file: ' + f + gs.NORMAL)
-
             # Creation of the z profiles
             BD.buildDeptho()
-
-        listBD.append(BD)
+            BD.computeFocus()
+            listBD.append(BD)
+            print(gs.BLUE + 'Job done for the file: ' + f + gs.NORMAL)
+            
         i = 1
         for BD in listBD:
-#             BD_manipID = findInfosInFileName(BD.fileName, 'manipID')
             subFileSavePath = os.path.join(PathDeptho, 'Intermediate_Py', NameDeptho)
-            # BD.saveBeadDeptho(subFileSavePath, specif +  '_' + str(i), step = step, bestDetphoType = 'HD', bestFocusType = 'HD_hd')
-            BD.saveBeadDeptho(subFileSavePath, f, step = step, bestDetphoType = 'HD', bestFocusType = 'HD_hd')
+            BD.saveBeadDeptho(subFileSavePath, f, step = step, bestDetphoType = bestDetphoType, bestFocusType = bestFocusType)
             i += 1
-
 
     maxAboveZm, maxBelowZm = 0, 0
     for BD in listBD:
-        Zm = int(np.round(BD.ZfocusDict['Zm_' + deptho_type + '_hd']))
+        Zm = int(np.round(BD.ZfocusDict['Zm_' + bestFocusType]))
         if Zm - BD.zFirst > maxAboveZm:
             maxAboveZm = Zm - BD.zFirst
         if BD.zLast - Zm > maxBelowZm:
             maxBelowZm = BD.zLast - Zm
     maxAboveZm, maxBelowZm = int(maxAboveZm), int(maxBelowZm)
     Zfocus = maxAboveZm
-    depthoWidth = listBD[0].depthosDict['deptho_' + deptho_type].shape[1]
+    depthoWidth = listBD[0].depthosDict['deptho_' + bestDetphoType].shape[1]
     depthoHeight = maxAboveZm + maxBelowZm
     finalDeptho = np.zeros([depthoHeight, depthoWidth], dtype = np.float64)
 
     for z in range(1, maxAboveZm+1):
         count = 0
         for BD in listBD:
-            Zm = int(np.round(BD.ZfocusDict['Zm_' + deptho_type + '_hd']))
-            currentDeptho = BD.depthosDict['deptho_' + deptho_type]
+            Zm = int(np.round(BD.ZfocusDict['Zm_' + bestFocusType]))
+            currentDeptho = BD.depthosDict['deptho_' + bestDetphoType]
             if Zm-z >= 0 and np.sum(currentDeptho[Zm-z,:] != 0):
                 count += 1
         for BD in listBD:
-            Zm = int(np.round(BD.ZfocusDict['Zm_' + deptho_type + '_hd']))
-            currentDeptho = BD.depthosDict['deptho_' + deptho_type]
+            Zm = int(np.round(BD.ZfocusDict['Zm_' + bestFocusType]))
+            currentDeptho = BD.depthosDict['deptho_' + bestDetphoType]
             if Zm-z >= 0 and np.sum(currentDeptho[Zm-z,:] != 0):
                 finalDeptho[Zfocus-z,:] += currentDeptho[Zm-z,:]/count
 
     for z in range(0, maxBelowZm):
         count = 0
         for BD in listBD:
-            Zm = int(np.round(BD.ZfocusDict['Zm_' + deptho_type + '_hd']))
-            currentDeptho = BD.depthosDict['deptho_' + deptho_type]
+            Zm = int(np.round(BD.ZfocusDict['Zm_' + bestFocusType]))
+            currentDeptho = BD.depthosDict['deptho_interp']
 #             print(currentDeptho.shape)
             if Zm+z >= 0 and Zm+z < currentDeptho.shape[0] and np.sum(currentDeptho[Zm+z,:] != 0):
                 count += 1
         for BD in listBD:
-            Zm = int(np.round(BD.ZfocusDict['Zm_' + deptho_type + '_hd']))
-            currentDeptho = BD.depthosDict['deptho_' + deptho_type]
+            Zm = int(np.round(BD.ZfocusDict['Zm_' + bestFocusType]))
+            currentDeptho = BD.depthosDict['deptho_' + bestDetphoType]
             if Zm+z >= 0 and Zm+z < currentDeptho.shape[0] and np.sum(currentDeptho[Zm+z,:] != 0):
                 finalDeptho[Zfocus+z,:] += currentDeptho[Zm+z,:]/count
 
@@ -2134,3 +2015,4 @@ def depthoMaker(dictPaths, dictConstants):
 
 
 # Finished !
+
