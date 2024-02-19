@@ -2,7 +2,7 @@
 
 Analyse experiments on the cell cortex
 
-* How to use this code - quickstart *
+**How to use this code - quickstart**
 1. Clone or download the repository
 2. Check the Example_Data folder & the instructions inside to run the code on an example case
 3. With this example in mind, you can now analyse your own data !
