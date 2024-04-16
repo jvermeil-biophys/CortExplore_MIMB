@@ -32,7 +32,7 @@ import time
 import pyautogui
 
 from scipy import interpolate
-
+from matplotlib import ticker
 from skimage import io, transform
 from scipy.signal import savgol_filter
 from scipy.optimize import linear_sum_assignment
@@ -1107,6 +1107,202 @@ class Trajectory:
             limInf = max(previousZ - maxDz, 0) - Ztop
             limSup = min(previousZ + maxDz, depthoDepth) - Ztop
             Z = Ztop + limInf + np.argmin(sumFinalD[limInf:limSup])
+            
+            
+            
+        #### Important plotting option here
+        if plot >= 1:
+            
+            
+            
+            plt.ioff()
+            fig, axes = plt.subplots(5, 3, figsize = (16,16))
+            
+            cmap = 'magma'
+            color_image = 'cyan'
+            color_Nup = ['gold', 'darkorange', 'red']
+            color_result = 'darkgreen'
+            color_previousResult = 'turquoise'
+            color_margin = 'aquamarine'
+            
+            im = framesNuplet[0].F
+            X2, Y2 = listXY[0][0], listXY[0][1]
+            
+            deptho_zticks_list = np.arange(0, depthoDepth, 50*self.HDZfactor, dtype = int)
+            deptho_zticks_loc = ticker.FixedLocator(deptho_zticks_list)
+            deptho_zticks_format = ticker.FixedFormatter((deptho_zticks_list/self.HDZfactor).astype(int))
+
+            
+            if Nup == 1:
+                direction = 'Single Image'
+            else:
+                direction = matchingDirection
+
+            pStart, pStop = np.percentile(im, (1, 99))
+            axes[0,0].imshow(im, vmin = pStart, vmax = 1.5*pStop, cmap = 'gray')
+            images_ticks_loc = ticker.MultipleLocator(50)
+            axes[0,0].xaxis.set_major_locator(images_ticks_loc)
+            axes[0,0].yaxis.set_major_locator(images_ticks_loc)
+            
+            
+            dx, dy = 50, 50
+            axes[0,0].plot([X2], [Y2], marker = '+', c = 'red')
+            axes[0,0].plot([X2-dx,X2-dx], [Y2-dy,Y2+dy], ls = '--', c = color_image, lw = 0.8)
+            axes[0,0].plot([X2+dx,X2+dx], [Y2-dy,Y2+dy], ls = '--', c = color_image, lw = 0.8)
+            axes[0,0].plot([X2-dx,X2+dx], [Y2-dy,Y2-dy], ls = '--', c = color_image, lw = 0.8)
+            axes[0,0].plot([X2-dx,X2+dx], [Y2+dy,Y2+dy], ls = '--', c = color_image, lw = 0.8)
+            # axes[0,0].set_xlim([X2-dx-1,X2+dx+2])
+            # axes[0,0].set_ylim([Y2+dy+1, Y2-dy-2])
+
+            # Plot the deptho then resize it better
+            axes[0,1].imshow(self.deptho, cmap = cmap)
+            XL0, YL0 = axes[0,1].get_xlim(), axes[0,1].get_ylim()
+            extent = (XL0[0], YL0[0]*(5/3), YL0[0], YL0[1])
+            axes[0,1].imshow(self.deptho, extent = extent, cmap = cmap)
+            
+            axes[0,1].yaxis.set_major_locator(deptho_zticks_loc)
+            axes[0,1].yaxis.set_major_formatter(deptho_zticks_format)
+            
+            pixLineHD = np.arange(0, hdSize, 1)
+            zPos = Zscanned
+            
+            
+            for i in range(Nframes):
+                idx_inNUp = int(framesNuplet[i].idx_inNUp)
+                idx_inNUp += (idx_inNUp == 0)
+                
+                # Show the bead appearence
+                axes[1,i].imshow(listWholeROI[i], cmap = cmap)
+                images_ticks_loc = ticker.MultipleLocator(10)
+                axes[1,i].xaxis.set_major_locator(images_ticks_loc)
+                axes[1,i].yaxis.set_major_locator(images_ticks_loc)
+                axes[1,i].set_title('Image {:.0f}/{:.0f} - '.format(idx_inNUp, Nup) + direction, 
+                                    fontsize = 14)
+                axes[1,i].axvline(cleanSize//2, c=color_Nup[i], ls='--', lw = 1)
+                
+                # #### HERE PLOT OPTION
+                axes[1,i].set_xlim([cleanSize//2-10,cleanSize//2+10])
+                axes[1,i].set_ylim([cleanSize//2+10,cleanSize//2-10])
+                
+                # Show the profile of the beads
+                axes[2,i].plot(pixLineHD, listProfiles[i], c = color_Nup[i])
+                axes[2,i].set_xlabel('Position along the profile - (Y-axis)', 
+                                      fontsize = 9)
+                axes[2,i].set_ylabel('Pixel intensity', 
+                                      fontsize = 9)
+                axes[2,i].set_title('Profile {:.0f}/{:.0f} - '.format(idx_inNUp, Nup), 
+                                    fontsize = 11)
+                
+                # Show the distance map to the deptho
+                listDistances = np.array(listDistances)
+                # inversed_listDistances = (listDistances[i] * (-1)) + np.max(listDistances[i])
+                # peaks, peaks_prop = signal.find_peaks(inversed_listDistances, distance = self.HDZfactor * 20)
+                axes[3,i].plot(zPos, listDistances[i])
+                # axes[3,i].plot(zPos, inversed_listDistances, ls='--', lw=0.75, c='k')
+                axes[3,i].xaxis.set_major_locator(deptho_zticks_loc)
+                axes[3,i].xaxis.set_major_formatter(deptho_zticks_format)
+                limy3 = axes[3,i].get_ylim()
+                min_i = zPos[np.argmin(listDistances[i])]
+                axes[3,i].plot([min_i, min_i], limy3, ls = '--', c = color_Nup[i])
+                
+                axes[3,i].set_xlabel('Position along the depthograph - (Z-axis)', 
+                                      fontsize = 9)
+                axes[3,i].set_ylabel('Cost\n(Squared diff to deptho)', 
+                                      fontsize = 9)
+                pos_nm = min_i/self.HDZfactor
+                axes[3,i].set_title(f'Cost curve {idx_inNUp:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}', 
+                                    fontsize = 11)
+                
+                # for p in peaks:
+                #     p_i = zPos[int(p)]
+                #     axes[3,i].plot([p_i], [np.mean(limy3)], ls = '',
+                #                   marker = 'v',  c = 'orange', mec = 'k', markersize = 8)
+                #     axes[3,i].text(p_i, np.mean(limy3)*1.1, str(p_i/self.HDZfactor), c = 'k')
+                axes[3,i].set_xlim([0, depthoDepth])
+                
+                
+                
+                #
+                axes[4,i].plot(zPos, finalDists[i])
+                axes[4,i].xaxis.set_major_locator(deptho_zticks_loc)
+                axes[4,i].xaxis.set_major_formatter(deptho_zticks_format)
+                limy4 = axes[4,i].get_ylim()
+                min_i = zPos[np.argmin(finalDists[i])]
+                axes[4,i].plot([min_i, min_i], limy4, ls = '--', c = color_Nup[i])
+                
+                axes[4,i].set_xlabel('Corrected position along the depthograph - (Z-axis)', 
+                                      fontsize = 9)
+                axes[4,i].set_ylabel('Cost\n(Squared diff to deptho)', 
+                                      fontsize = 9)
+                pos_nm = min_i/self.HDZfactor
+                axes[4,i].set_title(f'Cost curve with corrected position {idx_inNUp:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}',
+                                    fontsize = 11)
+                
+                # axes[4,i].text(min_i+5, np.mean(limy4), str(min_i/self.HDZfactor), c = 'k')
+                axes[4,i].set_xlim([0, depthoDepth])
+
+
+
+                axes[0,1].plot([axes[0,1].get_xlim()[0], axes[0,1].get_xlim()[1]-1], 
+                                [listZ[i], listZ[i]], 
+                                ls = '--', c = color_Nup[i])
+                
+                axes[0,1].plot([axes[0,1].get_xlim()[0], axes[0,1].get_xlim()[1]-1], 
+                                [Z,Z], 
+                                ls = '--', c = color_result)
+
+
+            axes[0,2].plot(zPos, sumFinalD)
+            axes[0,2].xaxis.set_major_locator(deptho_zticks_loc)
+            axes[0,2].xaxis.set_major_formatter(deptho_zticks_format)
+            limy0 = axes[0,2].get_ylim()
+            axes[0,2].plot([Z, Z], limy0, ls = '-', c = color_result, label = 'Z', lw = 1.5)
+            axes[0,2].plot([previousZ, previousZ], limy0, 
+                            ls = '--', c = color_previousResult, label = 'previous Z', lw = 0.8)
+            axes[0,2].plot([previousZ-maxDz, previousZ-maxDz], limy0,
+                            ls = '--', c = color_margin, label = 'allowed margin', lw = 0.8)
+            axes[0,2].plot([previousZ+maxDz, previousZ+maxDz], limy0,
+                            ls = '--', c = color_margin, lw = 0.8)
+            axes[0,2].set_xlim([0, depthoDepth])
+            
+            axes[0,2].set_xlabel('Position along the depthograph\n(Z-axis)', 
+                                  fontsize = 9)
+            axes[0,2].set_ylabel('Total Cost\n(Sum of Squared diff to deptho)', 
+                                  fontsize = 9)
+            axes[0,2].set_title('Sum of Cost curves with corrected position', 
+                                fontsize = 11)
+            axes[0,2].legend()
+            
+            for ax in axes.flatten():
+                ax.tick_params(axis='x', labelsize=9)
+                ax.tick_params(axis='y', labelsize=9)
+            
+            Nfig = plt.gcf().number
+            iSNuplet = [F.iS for F in framesNuplet]
+            
+            fig.tight_layout()
+            fig.subplots_adjust(top=0.94)
+            
+            fig.suptitle('Frames '+str(iFNuplet)+' - Slices '+str(iSNuplet)+' ; '+\
+                          'Z = {:.1f} slices = '.format(Z/self.HDZfactor) + \
+                          '{:.4f} µm'.format(Z*(self.depthoStep/1000)),
+                          y=0.98)
+                
+            ZPlots_path = f'.\\Zplots\\{self.cellID}\\'
+            if not os.path.isdir('.\\Zplots\\'):
+                os.mkdir(os.path.isdir('.\\Zplots\\'))
+            if not os.path.isdir(ZPlots_path):
+                os.mkdir(ZPlots_path)
+            
+            saveName = 'ZCheckPlot_S{:.0f}_B{:.0f}.png'.format(iSNuplet[0], self.iB+1)
+            savePath = os.path.join(ZPlots_path, saveName)
+            fig.savefig(savePath)
+            plt.close(fig)
+        
+        plt.ion()
+            
+            
+            
         return(Z)
 
 
