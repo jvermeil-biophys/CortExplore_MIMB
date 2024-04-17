@@ -834,7 +834,6 @@ class Frame:
         if len(self.listBeads) > 0:
             for B in self.listBeads:
                 ax.plot([B.x], [B.y], c='orange', marker='+', markersize = 15)
-
         fig.show()
 
     def makeListBeads(self):
@@ -950,7 +949,7 @@ class Trajectory:
                 
             #### Enable plots of Z detection  here
                 # plot = 0
-                # if (iF >= 705 and iF <= 750):# or (iF > 400 and iF <= 440):
+                # if (iF >= 0 and iF <= 20):# or (iF > 400 and iF <= 440):
                 #     plot = 1
                     
             # ###################################################################
@@ -1112,9 +1111,7 @@ class Trajectory:
             
         #### Important plotting option here
         if plot >= 1:
-            
-            
-            
+
             plt.ioff()
             fig, axes = plt.subplots(5, 3, figsize = (16,16))
             
@@ -1168,15 +1165,15 @@ class Trajectory:
             
             
             for i in range(Nframes):
-                idx_inNUp = int(framesNuplet[i].idx_inNUp)
-                idx_inNUp += (idx_inNUp == 0)
+                status_frame = int(framesNuplet[i].status_frame)
+                status_frame += (status_frame == 0)
                 
                 # Show the bead appearence
                 axes[1,i].imshow(listWholeROI[i], cmap = cmap)
                 images_ticks_loc = ticker.MultipleLocator(10)
                 axes[1,i].xaxis.set_major_locator(images_ticks_loc)
                 axes[1,i].yaxis.set_major_locator(images_ticks_loc)
-                axes[1,i].set_title('Image {:.0f}/{:.0f} - '.format(idx_inNUp, Nup) + direction, 
+                axes[1,i].set_title('Image {:.0f}/{:.0f} - '.format(status_frame, Nup) + direction, 
                                     fontsize = 14)
                 axes[1,i].axvline(cleanSize//2, c=color_Nup[i], ls='--', lw = 1)
                 
@@ -1190,7 +1187,7 @@ class Trajectory:
                                       fontsize = 9)
                 axes[2,i].set_ylabel('Pixel intensity', 
                                       fontsize = 9)
-                axes[2,i].set_title('Profile {:.0f}/{:.0f} - '.format(idx_inNUp, Nup), 
+                axes[2,i].set_title('Profile {:.0f}/{:.0f} - '.format(status_frame, Nup), 
                                     fontsize = 11)
                 
                 # Show the distance map to the deptho
@@ -1210,7 +1207,7 @@ class Trajectory:
                 axes[3,i].set_ylabel('Cost\n(Squared diff to deptho)', 
                                       fontsize = 9)
                 pos_nm = min_i/self.HDZfactor
-                axes[3,i].set_title(f'Cost curve {idx_inNUp:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}', 
+                axes[3,i].set_title(f'Cost curve {status_frame:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}', 
                                     fontsize = 11)
                 
                 # for p in peaks:
@@ -1235,7 +1232,7 @@ class Trajectory:
                 axes[4,i].set_ylabel('Cost\n(Squared diff to deptho)', 
                                       fontsize = 9)
                 pos_nm = min_i/self.HDZfactor
-                axes[4,i].set_title(f'Cost curve with corrected position {idx_inNUp:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}',
+                axes[4,i].set_title(f'Cost curve with corrected position {status_frame:.0f}/{Nup:.0f} - pos = {pos_nm:.0f}',
                                     fontsize = 11)
                 
                 # axes[4,i].text(min_i+5, np.mean(limy4), str(min_i/self.HDZfactor), c = 'k')
@@ -1290,7 +1287,7 @@ class Trajectory:
                 
             ZPlots_path = f'.\\Zplots\\{self.cellID}\\'
             if not os.path.isdir('.\\Zplots\\'):
-                os.mkdir(os.path.isdir('.\\Zplots\\'))
+                os.mkdir('.\\Zplots\\')
             if not os.path.isdir(ZPlots_path):
                 os.mkdir(ZPlots_path)
             
