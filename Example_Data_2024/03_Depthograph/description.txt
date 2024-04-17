@@ -1,0 +1,2 @@
+This folder is intentionally left empty.
+If you follow the tutorial and run the code on the example data, the generated depthograph will be saved here.

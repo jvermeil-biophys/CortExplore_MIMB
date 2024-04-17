@@ -1010,15 +1010,36 @@ class Trajectory:
             xx = np.arange(0, 5)
             yy = np.arange(0, cleanSize)
             try:
-                X, Y, iS = int(np.round(listXY[i][0])), int(np.round(listXY[i][1])), listiS[i] # > We could also try to recenter the image to keep a subpixel resolution here
-                # line that is 5 pixels wide
-                wholeROI = framesNuplet[i].F[Y-cleanSize//2:Y+cleanSize//2+1, X-cleanSize//2:X+cleanSize//2+1]
-                profileROI = framesNuplet[i].F[Y-cleanSize//2:Y+cleanSize//2+1, X-2:X+3]
-                f = interpolate.interp2d(xx, yy, profileROI, kind='cubic')
-                # Now use the obtained interpolation function and plot the result:
-                xxnew = xx
-                yynew = np.linspace(0, cleanSize, hdSize)
-                profileROI_hd = f(xxnew, yynew)
+                
+                X, Y = listXY[i][0], listXY[i][1]
+                roughSize = cleanSize + 4
+                roughCenter = roughSize // 2
+                xb1, yb1, xb2, yb2, validROI = ufun.getROI(roughSize, X, Y, self.nx, self.ny)
+                F_roughRoi = framesNuplet[i].F[yb1:yb2, xb1:xb2]
+                
+                xc1, yc1 = X-xb1-0.5, Y-yb1-0.5
+                translation = (xc1-roughCenter, yc1-roughCenter)
+                
+                tform = transform.EuclideanTransform(rotation=0, translation = translation)
+                F_tmp = transform.warp(F_roughRoi, tform, order = 1, preserve_range = True)
+
+                wholeROI = np.copy(F_tmp[roughCenter-cleanSize//2:roughCenter+cleanSize//2+1,\
+                                           roughCenter-cleanSize//2:roughCenter+cleanSize//2+1])
+                cleanCenter = cleanSize // 2
+                
+                
+                profileROI = wholeROI[:, cleanCenter-2:cleanCenter+3] # line that is 5 pixels wide     
+                profileROI_hd = ufun.resize_2Dinterp(profileROI, new_nx = 5, new_ny = hdSize)
+                
+                # X, Y, iS = int(np.round(listXY[i][0])), int(np.round(listXY[i][1])), listiS[i] # > We could also try to recenter the image to keep a subpixel resolution here
+                # # line that is 5 pixels wide
+                # wholeROI = framesNuplet[i].F[Y-cleanSize//2:Y+cleanSize//2+1, X-cleanSize//2:X+cleanSize//2+1]
+                # profileROI = framesNuplet[i].F[Y-cleanSize//2:Y+cleanSize//2+1, X-2:X+3]
+                # f = interpolate.interp2d(xx, yy, profileROI, kind='cubic')
+                # # Now use the obtained interpolation function and plot the result:
+                # xxnew = xx
+                # yynew = np.linspace(0, cleanSize, hdSize)
+                # profileROI_hd = f(xxnew, yynew)
 
             except: # If the vertical slice doesn't work, try the horizontal one
                 print(gs.ORANGE + 'error with the vertical slice -> trying with horizontal one')
@@ -1029,11 +1050,8 @@ class Trajectory:
                 # line that is 5 pixels wide
                 wholeROI = framesNuplet[i].F[Y-cleanSize//2:Y+cleanSize//2+1, X-cleanSize//2:X+cleanSize//2+1]
                 profileROI = framesNuplet[i].F[Y-2:Y+3, X-cleanSize//2:X+cleanSize//2+1]
-                f = interpolate.interp2d(xx, yy, profileROI, kind='cubic')
                 # Now use the obtained interpolation function and plot the result:
-                xxnew = np.linspace(0, cleanSize, hdSize)
-                yynew = yy
-                profileROI_hd = f(xxnew, yynew).T
+                profileROI_hd = ufun.resize_2Dinterp(profileROI, new_nx = hdSize, new_ny = 5).T
 
             listROI.append(profileROI)
             listWholeROI.append(wholeROI)
@@ -1799,6 +1817,8 @@ class BeadDeptho:
         self.profileDict = {}
         self.ZfocusDict = {}
 
+
+
     def buildCleanROI(self, plot = 0):
         # Determine if the bead is to close to the edge on the max frame
         D0 = self.D0
@@ -1812,6 +1832,9 @@ class BeadDeptho:
 
         # If the bead is valid we can proceed
         self.validBead = validBead
+        
+        if not validBead:
+            print('invalid image size')
 
         if validBead:
             for z in range(self.bestZ, -1, -1):
@@ -1839,7 +1862,7 @@ class BeadDeptho:
                         self.valid_v = False
 
 
-                xm1, ym1 = xmi-x1, ymi-y1
+                xm1, ym1 = xmi-x1-0.5, ymi-y1-0.5
                 I_roughRoi = self.I[i,y1:y2,x1:x2]
 
                 translation = (xm1-roughCenter, ym1-roughCenter)
@@ -1852,6 +1875,7 @@ class BeadDeptho:
                                               roughCenter-cleanSize//2:roughCenter+cleanSize//2+1])
 
             if not self.valid_v:
+                print('invalid vertical slice')
                 self.validBead = False
 
             else:
@@ -1861,6 +1885,8 @@ class BeadDeptho:
                 self.I_cleanROI = I_cleanROI.astype(np.uint16)
                 
             if self.validDepth < self.nz * (2/3):
+                print('invalid depth')
+                print(self.validDepth, self.nz * (2/3), self.nz)
                 self.validBead = False
 
             # VISUALISE
@@ -1871,6 +1897,80 @@ class BeadDeptho:
 
             # except:
             #     print('Error for the file: ' + self.fileName)
+
+
+    # def buildCleanROI(self, plot = 0):
+    #     # Determine if the bead is to close to the edge on the max frame
+    #     D0 = self.D0
+    #     roughSize = np.floor(1.1*D0*self.scale)
+    #     mx, Mx = np.min(self.X0 - 0.5*roughSize), np.max(self.X0 + 0.5*roughSize)
+    #     my, My = np.min(self.Y0 - 0.5*roughSize), np.max(self.Y0 + 0.5*roughSize)
+    #     testImageSize = mx > 0 and Mx < self.nx and my > 0 and My < self.ny
+
+    #     # Aggregate the different validity test (for now only 1)
+    #     validBead = testImageSize
+
+    #     # If the bead is valid we can proceed
+    #     self.validBead = validBead
+
+    #     if validBead:
+    #         for z in range(self.bestZ, -1, -1):
+    #             if not z in self.S0:
+    #                 break
+    #         zFirst = z
+    #         for z in range(self.bestZ, self.nz, +1):
+    #             if not z in self.S0:
+    #                 break
+    #         zLast = z-1
+
+    #         roughSize = int(np.floor(1.05*self.D0*self.scale))
+    #         roughSize += 1 + roughSize%2
+    #         roughCenter = int((roughSize+1)//2)
+
+    #         cleanSize = ufun.getDepthoCleanSize(self.D0, self.scale)
+    #         I_cleanROI = np.zeros([self.nz, cleanSize, cleanSize])
+
+    #         # try:
+    #         for i in range(zFirst, zLast):
+    #             xmi, ymi = self.XYm[i,0], self.XYm[i,1]
+    #             x1, y1, x2, y2, validBead = ufun.getROI(roughSize, xmi, ymi, self.nx, self.ny)
+    #             if not validBead:
+    #                 if y1 < 0 or y2 > self.ny:
+    #                     self.valid_v = False
+
+
+    #             xm1, ym1 = xmi-x1, ymi-y1
+    #             I_roughRoi = self.I[i,y1:y2,x1:x2]
+
+    #             translation = (xm1-roughCenter, ym1-roughCenter)
+
+    #             tform = transform.EuclideanTransform(rotation=0, translation = translation)
+
+    #             I_tmp = transform.warp(I_roughRoi, tform, order = 1, preserve_range = True)
+
+    #             I_cleanROI[i] = np.copy(I_tmp[roughCenter-cleanSize//2:roughCenter+cleanSize//2+1,\
+    #                                           roughCenter-cleanSize//2:roughCenter+cleanSize//2+1])
+
+    #         if not self.valid_v:
+    #             self.validBead = False
+
+    #         else:
+    #             self.zFirst = zFirst
+    #             self.zLast = zLast
+    #             self.validDepth = zLast-zFirst
+    #             self.I_cleanROI = I_cleanROI.astype(np.uint16)
+                
+    #         if self.validDepth < self.nz * (2/3):
+    #             self.validBead = False
+
+    #         # VISUALISE
+    #         if plot >= 2:
+    #             self.plotROI()
+    #             # for i in range(zFirst, zLast, 50):
+    #             #     self.plotROI(i)
+
+    #         # except:
+    #         #     print('Error for the file: ' + self.fileName)
 
 
     def buildDeptho(self, nbPixToAvg = 5, interpolationFactor = 5):
